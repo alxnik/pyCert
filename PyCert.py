@@ -98,9 +98,12 @@ def PemParse(CertBuffer):
         
     return PemObjects
     
+PublicKeyAlgorithm = {
+    "rsaEncryption"             : "1.2.840.113549.1.1.1",
+    "id-ecPublicKey"            : "1.2.840.10045.2.1",
+}
 
 SignatureAlgorithm = {
-    "rsaEncryption"             : "1.2.840.113549.1.1.1",
     "md2WithRSAEncryption"      : "1.2.840.113549.1.1.2",
     "md4WithRSAEncryption"      : "1.2.840.113549.1.1.3",
     "md5WithRSAEncryption"      : "1.2.840.113549.1.1.4",
@@ -112,7 +115,13 @@ SignatureAlgorithm = {
     "sha256WithRSAEncryption"   : "1.2.840.113549.1.1.11",
     "sha384WithRSAEncryption"   : "1.2.840.113549.1.1.12",
     "sha512WithRSAEncryption"   : "1.2.840.113549.1.1.13",
-    "sha224WithRSAEncryption"   : "1.2.840.113549.1.1.14"
+    "sha224WithRSAEncryption"   : "1.2.840.113549.1.1.14",
+    
+    "ecdsa-with-SHA1"           : "1.2.840.10045.4.1",
+    "ecdsa-with-SHA224"         : "1.2.840.10045.4.3.1",
+    "ecdsa-with-SHA256"         : "1.2.840.10045.4.3.2",
+    "ecdsa-with-SHA384"         : "1.2.840.10045.4.3.3",
+    "ecdsa-with-SHA512"         : "1.2.840.10045.4.3.4",
 }
 
 RelativeDistinguishedName = {
@@ -179,6 +188,8 @@ class X509():
         for algo in SignatureAlgorithm.keys():
             if str(Algorithm) == SignatureAlgorithm[algo]:
                 return algo
+            
+        raise NotImplementedError
         
     def ValidNotBefore(self):
         from datetime import datetime
@@ -192,9 +203,11 @@ class X509():
         
     def PublicKeyAlgorithm(self):
         Algorithm = self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo').getComponentByName('algorithm').getComponentByName('algorithm')
-        for algo in SignatureAlgorithm.keys():
-            if str(Algorithm) == SignatureAlgorithm[algo]:
+        for algo in PublicKeyAlgorithm.keys():
+            if str(Algorithm) == PublicKeyAlgorithm[algo]:
                 return algo
+            
+        raise NotImplementedError
         
     def PublicKey(self):
         payload = bits2bytes(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
