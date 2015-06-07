@@ -194,12 +194,18 @@ class X509():
     def ValidNotBefore(self):
         from datetime import datetime
         Time = self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('validity').getComponentByName('notBefore').getComponentByName('utcTime')
-        return datetime.strptime(str(Time), "%y%m%d%H%M%SZ")
+        if Time:
+            return datetime.strptime(str(Time), "%y%m%d%H%M%SZ")
+        else:
+            return None
     
     def ValidNotAfter(self):
         from datetime import datetime
         Time = self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('validity').getComponentByName('notAfter').getComponentByName('utcTime')
-        return datetime.strptime(str(Time), "%y%m%d%H%M%SZ")
+        if Time:
+            return datetime.strptime(str(Time), "%y%m%d%H%M%SZ")
+        else:
+            return None
         
     def PublicKeyAlgorithm(self):
         Algorithm = self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo').getComponentByName('algorithm').getComponentByName('algorithm')
