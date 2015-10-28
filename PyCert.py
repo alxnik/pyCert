@@ -160,7 +160,33 @@ class RSAPublicKey():
             )
     
 
-
+class X509Subject():
+    
+    def __init__(self, payload = ""):
+        self.payload = payload
+    
+    def __GetValue(self, AttType):
+        for RDNSeq in self.payload.getComponentByPosition(0):
+            if str(RDNSeq.getComponentByPosition(0).getComponentByName("type")) == AttType:
+                return str(RDNSeq.getComponentByPosition(0).getComponentByName("value"))[2:]
+            
+        return None
+                        
+    def Country(self):
+        return self.__GetValue("2.5.4.6")
+    def Organization(self):
+        return self.__GetValue("2.5.4.10")
+    def OrganizationalUnit(self):
+        return self.__GetValue("2.5.4.11")
+    def StateProvince(self):
+        return self.__GetValue("2.5.4.8")
+    def CommonName(self):
+        return self.__GetValue("2.5.4.3")
+    
+    def SerialNumber(self):
+        pass
+    
+    
 
     
 class X509():
@@ -219,6 +245,12 @@ class X509():
         payload = bits2bytes(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
         if self.PublicKeyAlgorithm() == 'rsaEncryption':
             return RSAPublicKey(payload)
+        
+    def Subject(self):
+        return X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subject'))
+    
+    def Issuer(self):
+        return X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('issuer'))
         
     def Signature(self):
         return bits2bytes(self.Asn1Obj.getComponentByName('signatureValue'))
