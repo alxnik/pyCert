@@ -2,7 +2,8 @@ from pyasn1.codec.der import decoder, encoder
 from pyasn1.type import univ, namedtype, tag
 from pyasn1_modules import rfc2459
 
-import re, hashlib
+import re
+from binascii import hexlify
 
 
 class ParseError(Exception):
@@ -19,8 +20,8 @@ def bits2bytes(bits):
         chars.append(chr(int(''.join([str(bit) for bit in byte]), 2)))
     return ''.join(chars)
 
-def bytes2int(bytes):
-    return int(bytes.encode('hex'), 16)
+def bytes2int(Bytes):
+    return int(Bytes.encode('hex'), 16)
 
 def PemParse(CertBuffer):
     PemStrings = (
@@ -134,16 +135,61 @@ RelativeDistinguishedName = {
     "organizationalUnitName"    : "2.5.4.11"
 }
 
-class RSAPublicKey():
+class ECPublicKey():
+ 
+    __ECCurves = {
+       "NIST192p" : univ.ObjectIdentifier("1.2.840.10045.3.1.1"),
+       "NIST224p" : univ.ObjectIdentifier("1.3.132.0.33"),
+       "NIST256p" : univ.ObjectIdentifier("1.2.840.10045.3.1.7"),
+       "NIST384p" : univ.ObjectIdentifier("1.3.132.0.34"),
+       "NIST521p" : univ.ObjectIdentifier("1.3.132.0.35"),
+       "SECP256k1": univ.ObjectIdentifier("1.3.132.0.10")
+    }
+    
+    __CurveMap = None
     
     def __init__(self, payload):
         
         try:
-            self.decodedAsn = decoder.decode(payload, asn1Spec=self.Asn())[0]
+            self.__DecodedParams = decoder.decode(payload.getComponentByName('algorithm').getComponentByName('parameters'), asn1Spec=self.__ParametersAsn())[0]
         except:
             raise ParseError("Invalid ASN1 data")
         
-        self.payload = payload
+        for curve in self.__ECCurves.keys():
+            if self.__DecodedParams == self.__ECCurves[curve]:
+                self.__CurveMap = curve
+                break
+                
+        if self.__CurveMap == None:
+            raise NotImplementedError("Curve map not supported")
+        
+        self.__ECPoint = bits2bytes(payload.getComponentByName('subjectPublicKey'))
+        
+        if self.__ECPoint[0] != '\x04':
+            raise NotImplementedError("Compressed EC Key not supported")
+        
+    def CurveMap(self):
+        return self.__CurveMap
+    
+    def Raw(self):
+        return self.__ECPoint[1:]
+
+    class __ParametersAsn(univ.Choice):
+        componentType = namedtype.NamedTypes(
+            namedtype.NamedType('namedCurve', univ.ObjectIdentifier())
+            )
+        
+class RSAPublicKey():
+    def __init__(self, payload):
+        PKRaw = bits2bytes(payload.getComponentByName('subjectPublicKey'))
+        try:
+            self.decodedAsn = decoder.decode(PKRaw, asn1Spec=self.__KeyAsn())[0]
+        except:
+            raise ParseError("Invalid ASN1 data")
+        
+        self.__params = payload.getComponentByName("algorithm").getComponentByName('parameters')
+        self.__payload = payload
+        self.__PKRaw = PKRaw
     
     def Modulus(self):
         return self.decodedAsn.getComponentByName('modulus')
@@ -151,9 +197,12 @@ class RSAPublicKey():
         return self.decodedAsn.getComponentByName('publicExponent')
     
     def Raw(self):
-        return self.payload
+        return self.__PKRaw
     
-    class Asn(univ.Sequence):
+    def Parameters(self):
+        return self.__params
+    
+    class __KeyAsn(univ.Sequence):
         componentType = namedtype.NamedTypes(
             namedtype.NamedType('modulus', univ.Integer()),
             namedtype.NamedType('publicExponent', univ.Integer())
@@ -186,8 +235,6 @@ class X509Subject():
     def SerialNumber(self):
         pass
     
-    
-
     
 class X509():
     
@@ -242,9 +289,11 @@ class X509():
         raise NotImplementedError
         
     def PublicKey(self):
-        payload = bits2bytes(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
+        payload = self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subjectPublicKeyInfo')
         if self.PublicKeyAlgorithm() == 'rsaEncryption':
             return RSAPublicKey(payload)
+        elif self.PublicKeyAlgorithm() == 'id-ecPublicKey':
+            return ECPublicKey(payload)
         
     def Subject(self):
         return X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subject'))
@@ -256,47 +305,83 @@ class X509():
         return bits2bytes(self.Asn1Obj.getComponentByName('signatureValue'))
         
     def Verify(self, issuer = None):
-        if(issuer == None):
+        if issuer == None:
             issuer = self
             
-        if(issuer.PublicKeyAlgorithm() == 'rsaEncryption'):
+        sigAlgo = self.SignatureAlgorithm()
+        CertDer = encoder.encode(self.Asn1Obj.getComponentByName('tbsCertificate'))
+        
+        if sigAlgo == 'sha1WithRSAEncryption' or sigAlgo == 'ecdsa-with-SHA1':
+            from Crypto.Hash import SHA
+            SigHash = SHA.new(CertDer)
+        elif sigAlgo == 'sha256WithRSAEncryption' or sigAlgo == 'ecdsa-with-SHA256':
+            from Crypto.Hash import SHA256
+            SigHash = SHA256.new(CertDer)
+        elif sigAlgo == 'sha384WithRSAEncryption' or sigAlgo == 'ecdsa-with-SHA384':
+            from Crypto.Hash import SHA384
+            SigHash = SHA384.new(CertDer)
+        elif sigAlgo == 'sha512WithRSAEncryption' or sigAlgo == 'ecdsa-with-SHA512':
+            from Crypto.Hash import SHA512
+            SigHash = SHA512.new(CertDer)
+        elif sigAlgo == 'sha224WithRSAEncryption' or sigAlgo == 'ecdsa-with-SHA224':
+            from Crypto.Hash import SHA224
+            SigHash = SHA224.new(CertDer)
+        elif sigAlgo == 'md2WithRSAEncryption':
+            from Crypto.Hash import MD2
+            SigHash = MD2.new(CertDer)
+        elif sigAlgo == 'md4WithRSAEncryption':
+            from Crypto.Hash import MD4
+            SigHash = MD4.new(CertDer)
+        elif sigAlgo == 'md5WithRSAEncryption':
+            from Crypto.Hash import MD5
+            SigHash = MD5.new(CertDer)
+        else:
+            raise NotImplementedError('Signature algorithm not supported ({0})'.format(sigAlgo))
+        
+        
+        
+        if issuer.PublicKeyAlgorithm() == 'rsaEncryption':
             from Crypto.PublicKey import RSA
             from Crypto.Signature import PKCS1_v1_5
             
             PubKeyDer = issuer.PublicKey().Raw()
             key = RSA.importKey(PubKeyDer)
-            
+        
             verifier = PKCS1_v1_5.new(key)
-            
-            from Crypto.Hash import *
-            sigAlgo = self.SignatureAlgorithm()
-            CertDer = encoder.encode(self.Asn1Obj.getComponentByName('tbsCertificate'))
-            if sigAlgo == 'sha1WithRSAEncryption':
-                SigHash = SHA.new(CertDer)
-            elif sigAlgo == 'sha256WithRSAEncryption':
-                SigHash = SHA256.new(CertDer)
-            elif sigAlgo == 'sha384WithRSAEncryption':
-                SigHash = SHA384.new(CertDer)
-            elif sigAlgo == 'sha512WithRSAEncryption':
-                SigHash = SHA512.new(CertDer)
-            elif sigAlgo == 'sha224WithRSAEncryption':
-                SigHash = SHA224.new(CertDer)
-            elif sigAlgo == 'md2WithRSAEncryption':
-                SigHash = MD2.new(CertDer)
-            elif sigAlgo == 'md4WithRSAEncryption':
-                SigHash = MD4.new(CertDer)
-            elif sigAlgo == 'md5WithRSAEncryption':
-                SigHash = MD5.new(CertDer)
-            else:
-                raise NotImplementedError
-            
-            if verifier.verify(SigHash, self.Signature()):
-                return True
-            else:
+            try:
+                if verifier.verify(SigHash, self.Signature()):
+                    return True
+                else:
+                    return False
+            except ValueError:
                 return False
+        
+        elif issuer.PublicKeyAlgorithm() == 'id-ecPublicKey':
+            from ecdsa import VerifyingKey, NIST192p, NIST224p, NIST256p, NIST384p, NIST521p, SECP256k1
+            from ecdsa.util import sigdecode_der
+            curves = [NIST192p, NIST224p, NIST256p, NIST384p, NIST521p, SECP256k1]
             
-        else: # Only RSA implemented
-            raise NotImplementedError
+            TheCurve = None
+            for crv in curves:
+                if crv.name == issuer.PublicKey().CurveMap():
+                    TheCurve = crv
+                    break
+                
+            if TheCurve == None:
+                raise NotImplementedError('Public Key Curve not supported ({0})'.format(issuer.PublicKey().CurveMap()))
+            
+            VerKey = VerifyingKey.from_string(issuer.PublicKey().Raw(), curve=TheCurve)
+            
+            try:
+                if VerKey.verify_digest(self.Signature(), SigHash.digest(), sigdecode=sigdecode_der):
+                    return True
+                else:
+                    return False
+            except:
+                return False
+          
+        else:
+            raise NotImplementedError('Public key algorithm not supported ({0})'.format(issuer.PublicKeyAlgorithm()))
 
         
         
