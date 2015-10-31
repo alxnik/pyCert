@@ -54,7 +54,7 @@ def PemParse(CertBuffer):
     
     if not isinstance(CertBuffer, str):
         try:
-            CertBuffer = CertBuffer.decode('utf-8')
+            CertBuffer = CertBuffer.decode('latin')
         except:
             raise ParseError('Invalid PEM Data')
         
@@ -126,15 +126,6 @@ SignatureAlgorithm = {
     "ecdsa-with-SHA512"         : "1.2.840.10045.4.3.4",
 }
 
-RelativeDistinguishedName = {
-    "commonName"                : "2.5.4.3",
-    "surname"                   : "2.5.4.4",
-    "countryName"               : "2.5.4.6",
-    "localityName"              : "2.5.4.7",
-    "stateOrProvinceName"       : "2.5.4.8",
-    "organizationName"          : "2.5.4.10",
-    "organizationalUnitName"    : "2.5.4.11"
-}
 
 class ECPublicKey():
  
@@ -180,7 +171,9 @@ class ECPublicKey():
             namedtype.NamedType('namedCurve', univ.ObjectIdentifier())
             )
         
+        
 class RSAPublicKey():
+    
     def __init__(self, payload):
         PKRaw = bits2bytes(payload.getComponentByName('subjectPublicKey'))
         try:
@@ -212,32 +205,90 @@ class RSAPublicKey():
 
 class X509Subject():
     
+    __RelativeDistinguishedName = (
+        { "SN" : "CN", "LN" : "commonName",             "OID" : "2.5.4.3" },
+        { "SN" : "SN", "LN" : "surname",                "OID" : "2.5.4.4" },
+        { "SN" : "",   "LN" : "serialNumber",           "OID" : "2.5.4.5" },
+        { "SN" : "C",  "LN" : "countryName",            "OID" : "2.5.4.6" },
+        { "SN" : "L",  "LN" : "localityName",           "OID" : "2.5.4.7" },
+        { "SN" : "ST", "LN" : "stateOrProvinceName",    "OID" : "2.5.4.8" },
+        { "SN" : "O",  "LN" : "organizationName",       "OID" : "2.5.4.10" },
+        { "SN" : "OU", "LN" : "organizationalUnitName", "OID" : "2.5.4.11" },
+        { "SN" : "",   "LN" : "title",                  "OID" : "2.5.4.12" },
+        { "SN" : "GN", "LN" : "givenName",              "OID" : "2.5.4.42" },
+        { "SN" : "",   "LN" : "initials",               "OID" : "2.5.4.43" },
+        { "SN" : "",   "LN" : "generationQualifier",    "OID" : "2.5.4.44" },
+        { "SN" : "",   "LN" : "distinguishedName",      "OID" : "2.5.4.49" },
+        { "SN" : "",   "LN" : "pseudonym",              "OID" : "2.5.4.65" }
+    )
+        
     def __init__(self, payload = ""):
         self.payload = payload
     
     def __GetValue(self, AttType):
-        for RDNSeq in self.payload.getComponentByPosition(0):
-            if str(RDNSeq.getComponentByPosition(0).getComponentByName("type")) == AttType:
-                return str(RDNSeq.getComponentByPosition(0).getComponentByName("value"))[2:]
-            
+        for RdnItem in self.__RelativeDistinguishedName:
+            if RdnItem["LN"] == AttType:
+                
+                for SubjectItem in self.payload.getComponentByPosition(0):
+                    if str(SubjectItem.getComponentByPosition(0).getComponentByName("type")) == RdnItem["OID"]:
+                        return str(SubjectItem.getComponentByPosition(0).getComponentByName("value"))[2:]
+                    
+                return None
         return None
                         
-    def Country(self):
-        return self.__GetValue("2.5.4.6")
-    def Organization(self):
-        return self.__GetValue("2.5.4.10")
-    def OrganizationalUnit(self):
-        return self.__GetValue("2.5.4.11")
-    def StateProvince(self):
-        return self.__GetValue("2.5.4.8")
     def CommonName(self):
-        return self.__GetValue("2.5.4.3")
-    
+        return self.__GetValue("commonName")
+    def Surname(self):
+        return self.__GetValue("surname")
     def SerialNumber(self):
-        pass
+        return self.__GetValue("serialNumber")
+    def Country(self):
+        return self.__GetValue("countryName")
+    def Locality(self):
+        return self.__GetValue("localityName")
+    def StateProvince(self):
+        return self.__GetValue("stateOrProvinceName")
+    def Organization(self):
+        return self.__GetValue("organizationName")
+    def OrganizationalUnit(self):
+        return self.__GetValue("organizationalUnitName")
+    def Title(self):
+        return self.__GetValue("title")
+    def GivenName(self):
+        return self.__GetValue("givenName")
+    def Initials(self):
+        return self.__GetValue("initials")
+    def GenerationQualifier(self):
+        return self.__GetValue("generationQualifier")
+    def DistinguishedName(self):
+        return self.__GetValue("distinguishedName")
+    def Pseudonym(self):
+        return self.__GetValue("pseudonym")
+    
+    def __str__(self):
+        SubjectStr = ''
+        for RdnItem in self.__RelativeDistinguishedName:
+            
+            Item = self.__GetValue(RdnItem['LN'])
+            if Item == None:
+                continue
+            
+            if(len(SubjectStr)):
+                SubjectStr += ', '
+                
+            if(len(RdnItem['SN'])):
+                SubjectStr += RdnItem['SN'] + '='
+            else:
+                SubjectStr += RdnItem['LN'] + '='
+            
+            SubjectStr += Item
+            
+        return SubjectStr
     
     
 class X509():
+    __SubjectObj = None
+    __IssuerObj = None
     
     def __init__(self, payload = ""):
         
@@ -297,10 +348,16 @@ class X509():
             return ECPublicKey(payload)
         
     def Subject(self):
-        return X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subject'))
+        if self.__SubjectObj == None:
+            self.__SubjectObj = X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('subject'))
+            
+        return self.__SubjectObj
     
     def Issuer(self):
-        return X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('issuer'))
+        if self.__IssuerObj == None:
+            self.__IssuerObj = X509Subject(self.Asn1Obj.getComponentByName('tbsCertificate').getComponentByName('issuer'))
+            
+        return self.__IssuerObj
         
     def Signature(self):
         return bits2bytes(self.Asn1Obj.getComponentByName('signatureValue'))
