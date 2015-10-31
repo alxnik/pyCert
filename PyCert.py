@@ -92,6 +92,7 @@ def PemParse(CertBuffer):
             parsedObj['data'] = b64decode(ObjectBuffer)
             
             PemObjects += (parsedObj,)
+            InObject = False
             
         elif InObject == True:
             ObjectBuffer += line
