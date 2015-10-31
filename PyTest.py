@@ -1,80 +1,78 @@
 import binascii, os
 
-from PyCert import X509
+from PyCert import X509, PemParse
 
-def PrintSubject(subj):
-    if subj.CommonName() != None:
-        print("CN=%s,"%(subj.CommonName())),
-    if subj.Organization() != None:
-        print("O=%s,"%(subj.Organization())),
-    if subj.OrganizationalUnit() != None:
-        print("OU=%s,"%(subj.OrganizationalUnit())),
-    if subj.StateProvince() != None:
-        print("ST=%s,"%(subj.StateProvince())),
-    if subj.Country() != None:
-        print("C=%s,"%(subj.Country())),
-    print("")
+def PrintCert(CertData):
+    try:
+        Cert = X509(thedata)
+        
+        print("             Version: " + str(Cert.Version()))
+         
+        print("              Serial: " + str(Cert.SerialNumber()))
+         
+        print("          Not Before: " + str(Cert.ValidNotBefore()))
+        print("           Not After: " + str(Cert.ValidNotAfter()))
+        print("")
 
+        print("              Issuer: %s" % (Cert.Issuer() ))
+         
+        print("             Subject: %s" % (Cert.Subject() ))
+        print("")
+         
+        print("Public Key Algorithm: " + Cert.PublicKeyAlgorithm())
+         
+        if Cert.PublicKeyAlgorithm() == 'rsaEncryption':
+            print("  Public Key Modulus: %x" % Cert.PublicKey().Modulus())
+            print(" Public Key Exponent: " + str(Cert.PublicKey().Exponent()))
+         
+        print("")
+        print(" Signature Algorithm: " + Cert.SignatureAlgorithm())
+        print("           Signature: " + binascii.hexlify(Cert.Signature()))
+        print("           Verified?: " + str(Cert.Verify()))
+     
+        print(" -------- ")
+
+
+    except Exception as e:
+#         raise
+        return False, e
+    else:
+        return True, None
+    
+    
+    
 CertDir = '/etc/ssl/certs/'
 # CertDir='certs/'
 
 failed = []
 passed = 0
+
 for File in os.listdir(CertDir):
      
     FullPath = CertDir + File
     if os.path.isdir(FullPath):
         continue
-     
-    if File.endswith(".0"):
-        continue
-
     
-    print(FullPath)
     CertFile = open(FullPath, 'rb')
-
+    
+    thedata = CertFile.read()
     try:
-        Cert = X509(CertFile.read())
-        
-        print("             Version: " + str(Cert.Version()))
-        
-        print("              Serial: " + str(Cert.SerialNumber()))
-        
-        print("          Not Before: " + str(Cert.ValidNotBefore()))
-        print("           Not After: " + str(Cert.ValidNotAfter()))
-        print("")
-        
-        print("              Issuer:"),
-        PrintSubject(Cert.Issuer())
-        
-        print("             Subject:"),
-        PrintSubject(Cert.Subject())
-        print("")
-        
-        print("Public Key Algorithm: " + Cert.PublicKeyAlgorithm())
-        
-        if Cert.PublicKeyAlgorithm() == 'rsaEncryption':
-            print("  Public Key Modulus: %x" % Cert.PublicKey().Modulus())
-            print(" Public Key Exponent: " + str(Cert.PublicKey().Exponent()))
-        
-        print("")
-        print(" Signature Algorithm: " + Cert.SignatureAlgorithm())
-        print("           Signature: " + binascii.hexlify(Cert.Signature()))
-        print("           Verified?: " + str(Cert.Verify()))
+        certs = PemParse(thedata)
+    except Exception as e:
+        failed.append({ "File" : FullPath, "Exception" : str(e) })
+        continue
     
-        print(" -------- ")
+    for cert in certs:
+        rv, e = PrintCert(cert)
+    
+        if rv == True:
+            passed += 1
+        else:
+            failed.append({ "File" : FullPath, "Exception" : str(e) })
 
 
-    except Exception, e:
-        fail = {
-            "File" : FullPath,
-            "Exception" : e
-        }
-        failed.append(fail)
-    else:
-        passed += 1
-    
     CertFile.close()
+#     break
 
 print("Passed: %d\nFailed: %d" % (passed, len(failed)))
 
