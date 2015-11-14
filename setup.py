@@ -1,6 +1,6 @@
 from setuptools import setup
 
-setup(name='PyCert',
+setup(name='pyCert',
       version='0.1',
       description='PKI Certificate python library',
       long_description=open('README.md').read(),
@@ -18,7 +18,7 @@ setup(name='PyCert',
       author='Alexandros Nikolopoulos',
       author_email='alxnik@gmail.com',
       license='LGPL',
-      packages=['PyCert'],
+      packages=['pyCert'],
       install_requires=[
           'pyasn1',
       ],
