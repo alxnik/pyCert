@@ -21,5 +21,7 @@ setup(name='pyCert',
       packages=['pyCert'],
       install_requires=[
           'pyasn1',
+          'pycrypto',
+          'ecdsa',
       ],
       zip_safe=True)
