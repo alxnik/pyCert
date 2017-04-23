@@ -1,10 +1,10 @@
 import binascii, os
 
-from PyCert import X509, PemParse
+from pyCert import pyCert
 
 def PrintCert(CertData):
     try:
-        Cert = X509(thedata)
+        Cert = pyCert.X509(thedata)
         
         print("             Version: " + str(Cert.Version()))
          
@@ -57,7 +57,7 @@ for File in os.listdir(CertDir):
     
     thedata = CertFile.read()
     try:
-        certs = PemParse(thedata)
+        certs = pyCert.PemParse(thedata)
     except Exception as e:
         failed.append({ "File" : FullPath, "Exception" : str(e) })
         continue
